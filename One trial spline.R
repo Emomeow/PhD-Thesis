@@ -21,13 +21,13 @@ source('Initial parameter.R')
 source('NR.R')
 
 
-# args = commandArgs(trailingOnly=TRUE)
-# i=as.numeric(args[1])
+args = commandArgs(trailingOnly=TRUE)
+i=as.numeric(args[1])
 # 
-# iniseed=1111+i
+iniseed=1111+i
 
 
-# set.seed(iniseed)
+set.seed(iniseed)
 
 
 col_names <- colnames(parameters)
@@ -62,14 +62,14 @@ estimate_bspline_hazard <- function(surv_obj, knots, degree) {
   # It now models h(t) = S(t) with the constraint alpha > 0.
   neg_log_likelihood <- function(alpha, time1, time2, status, knots, degree) {
     total_ll <- 0
-    # a. Calculate the log-hazard at the event times
+    # a. Calculate the log likelihood for right-censored data
     idx_right <- which(status == 0)
     if (length(idx_right) > 0) {
       times_L <- time1[idx_right]
       H_L <- spline_cumulative_hazard(times_L, knots, alpha, boundary_knots, degree)
       total_ll <- total_ll + sum(-H_L)
     }
-    
+    # b. Calculate the log likelihood for interval-censored data
     idx_interval <- which(status == 3)
     if (length(idx_interval) > 0) {
       times_L <- time1[idx_interval]
@@ -83,18 +83,6 @@ estimate_bspline_hazard <- function(surv_obj, knots, degree) {
       
       total_ll <- total_ll + sum(log(S_L - S_R))
     }
-    # b. Calculate the cumulative hazard for ALL subjects at their follow-up time
-    
-    # We use sapply to integrate the hazard function from 0 to each subject's time
-    # cumulative_hazard_values <- as.vector(ibs(times, knots = knots, degree = degree, intercept = TRUE) %*% alpha)
-    #cumulative_hazard_values <- spline_cumulative_hazard(times, knots, alpha, boundary_knots, degree)
-    # c. Calculate the total log-likelihood and negate it for minimization
-    #log_likelihood <- sum(log_hazard_values) - sum(cumulative_hazard_values)
-    
-    # Return a large value if the log-likelihood is not finite, to guide the optimizer
-    # if (!is.finite(log_likelihood)) {
-    #   return(1e9)
-    # }
     
     return(-total_ll)
   }
@@ -112,8 +100,6 @@ estimate_bspline_hazard <- function(surv_obj, knots, degree) {
     par = initial_alphas,
     fn = neg_log_likelihood,
     method = "L-BFGS-B", # Use a method that allows box constraints
-    # lower = rep(-1, num_alphas), # Set a small positive lower bound for alpha
-    # upper = rep(1, num_alphas),
     hessian = TRUE, # Ask for the Hessian matrix to calculate standard errors
     time1 = surv_obj[, 1],
     time2 = surv_obj[, 2],
@@ -172,74 +158,13 @@ colnames(alpha) = paste("alpha",1:(num_knots+degree+1),sep = "_")
 # plot(test.time, test.hazard)
 # lines(test.time, par[2]/par[1]*(test.time/par[1])^(par[2]-1))
 
-ini.parameters = cbind(parameters, alpha)
-# ini.parameters = cbind(parameters + runif(num_para, min=-0.5,max=0.5)*parameters, alpha)
+# ini.parameters = cbind(parameters, alpha)
+ini.parameters = cbind(parameters + runif(num_para, min=-0.5,max=0.5)*parameters, alpha)
 ###################################
-## Give initial guess of other parameters
-# library(lme4)
-# library(JMbayes2)
-# library(survival)
-# # Fit 2 longitudinal models for 2 biomarkers
-# data_longitudinal <- long.data |>
-#   group_by(id) |>
-#   mutate(gammaterm = as.numeric(visittime >= etime)*(visittime - (etime+preetime)/2)) |>
-#   ungroup()
-# 
-# model1_long = lme(fixed = y ~ visittime + gammaterm + x,
-#                   random = ~ 1|id,
-#                   data = data_longitudinal)
-# 
-# model2_long = lme(fixed = stroopwo ~ visittime + gammaterm + age1 + educ_yrs + gender + base_cap,
-#                   random = ~ 1|id,
-#                   data = data_longitudinal)
-# 
-# summary(model1_long)
-# summary(model2_long)
 
 hat.parameters = ini.parameters
-#############################
-# test
-# mode = 3
-# source('Initial parameter.R')
-# degree <- 1
-# knots <- NULL
-# num_knots = 0
-# alpha <- c(-Inf, log(boundary_knots[2]/par[1]))
-# alpha <- data.frame(t(alpha))
-# colnames(alpha) = paste("alpha",1:(num_knots+degree+1),sep = "_")
-# ini.parameters = cbind(parameters, alpha)
-# 
-# beta.0.test = seq(-0.2,0.2,by=0.01)
-# likelihood.test = rep(0,length(beta.0.test))
-# 
-# for (i in 1:length(beta.0.test)){
-#   parameters.test.i = ini.parameters + beta.0.test[i]*t(c(1,rep(0, length(ini.parameters)-1)))
-#   likelihood.test[i]=likelihood.spline(long.data, parameters.test.i, knots)$ll
-# }
-# plot(beta.0.test,likelihood.test)
-# 
-# mode = 2
-# source('Initial parameter.R')
-# long.data.id = long.data[!duplicated(long.data$id),]
-# time = c(long.data.id$preetime,pmin(long.data.id$etime,long.data.id$ctime))
-# 
-# d = c(0, quantile(time, probs = seq(1, knots)/knots, na.rm = TRUE))
-# ini.hazard = data.frame(t(rep(1/par[1], knots)))
-# colnames(ini.hazard) = paste("hazard",1:knots,sep = "_")
-# ini.parameters = parameters # + runif(num_para, min=-0.5,max=0.5)*parameters
-# ini.parameters = cbind(ini.parameters, ini.hazard)
-# 
-# beta.0.test = seq(-0.2,0.2,by=0.01)
-# likelihood.test = rep(0,length(beta.0.test))
-# 
-# for (i in 1:length(beta.0.test)){
-#   parameters.test.i = ini.parameters + beta.0.test[i]*t(c(1,rep(0, length(ini.parameters)-1)))
-#   likelihood.test[i]=likelihood.piecewise(long.data, parameters.test.i)$ll
-# }
-# plot(beta.0.test,likelihood.test)
-# likelihood has some problem
-ini.likelihood = likelihood.spline2(long.data, ini.parameters, knots)$ll
-##################################
+
+# ini.likelihood = likelihood.spline2(long.data, ini.parameters, knots)$ll
 
 hat.parameters = NR_spline(long.data, hat.parameters, knots)
 coef = hat.parameters %>% dplyr::select(!contains("alpha"))
@@ -258,8 +183,6 @@ colnames(coef) = col_names
 
 write.csv(coef,paste("est_coef_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
 
-# write.csv(bias,paste("est_bias_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
-
 knots = data.frame(t(knots))
 colnames(knots) = paste("knots_",1:num_knots,sep = '')
 alpha.hat = hat.parameters %>% dplyr::select(contains('alpha'))
@@ -269,18 +192,8 @@ hazard = cbind(knots, alpha.hat, boundary)
 write.csv(hazard,paste("hazard_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
 
 # bootstrap for stddev
-B = 2
+B = 50
 bootstrap = 1
-
-
-
-#hat.hazard = hat.parameters %>% dplyr::select(contains("hazard"))
-#piecewise_hazard = cbind(as.vector(d[-length(d)]),t(hat.hazard))
-#colnames(piecewise_hazard) = c("knots","hazard")
-#coef = hat.parameters %>% dplyr::select(!contains("hazard"))
-# bias = coef-parameters
-#colnames(coef) = col_names
-
 
 # Bootstrap code
 if (bootstrap == 1){
@@ -337,44 +250,3 @@ colnames(CP) = col_names
 
 write.csv(stddev,paste("est_std_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
 write.csv(CP,paste("CP_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
-
-##########################################
-
-# # test likelihood for piecewise and Bspline
-# degree <- 1
-# knots <- NULL
-# num_knots = 0
-# # alpha = rep(1/par[1], num_knots+degree+1)
-# 
-# 
-# #use cumsum(exp(alpha))
-# boundary_knots = c(0, max(long.data$visittime))
-# alpha <- c(-Inf, log(boundary_knots[2]/par[1]))
-# hazard_value2 = spline_hazard(test.time, knots, alpha, boundary_knots, degree)
-# #hazard_value_matrix = evaluate_spline_matrix(test.time, knots, alpha, boundary_knots, degree)
-# cumulative_hazard_value2 = spline_cumulative_hazard(test.time, knots, alpha, boundary_knots, degree)
-# 
-# alpha <- data.frame(t(alpha))
-# colnames(alpha) = paste("alpha",1:(num_knots+degree+1),sep = "_")
-# ini.parameters = cbind(parameters, alpha)
-# hat.parameters = ini.parameters
-# ll1_2 = likelihood.spline(long.data, hat.parameters, knots)$ll
-# ll1_3 = likelihood.spline2(long.data, hat.parameters, knots)$ll
-# mode = 2
-# source('Initial parameter.R')
-# d = c(0, quantile(time, probs = seq(1, knots)/knots, na.rm = TRUE))
-# # ini.hazard = data.frame(t(1/knots/diff(d)))
-# ini.hazard = data.frame(t(rep(1/par[1], knots)))
-# colnames(ini.hazard) = paste("hazard",1:knots,sep = "_")
-# ini.parameters = cbind(parameters, ini.hazard)
-# hat.parameters = ini.parameters
-# ll2 = likelihood.piecewise(long.data, hat.parameters)$ll
-# 
-# mode = 1
-# source('Initial parameter.R')
-# hat.parameters = unlist(parameters)
-# ll3 = likelihood.vec2(long.data, hat.parameters)
-
-# Now the three codes in constant hazard case are the same.
-
-# verify that fitted hazard close to true
