@@ -155,8 +155,10 @@ NR_spline = function(long.data, hat.parameters, knots, degree=3, tol = 1e-3, max
       CP = matrix(NA, nrow=1, ncol=length(parameters))
       break
     }
-    diff.theta = max(abs(hat.parameters-old.parameters))
+    # diff.theta = max(abs(hat.parameters-old.parameters))
+    diff.theta = max(abs(hat.parameters-old.parameters)/abs(old.parameters))
     loop = loop + 1
   }
   return(hat.parameters)
 }
+
