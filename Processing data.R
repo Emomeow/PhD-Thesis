@@ -84,24 +84,6 @@ sd_NE_S <- sd_NE_S_files %>%
   lapply(read.csv) %>%
   bind_rows()
 
-# Data
-# full_data <- data_files %>%
-#   lapply(read.csv)
-# 
-# full_data2 <- bind_rows(
-#   lapply(seq_along(full_data), function(i) {
-#     full_data[[i]] |>
-#       mutate(dataset_id = i)
-#   })
-# )
-
-# full_data3 <- full_data2 %>%
-#   group_by(dataset_id, id) |>               # unique person = (dataset_id, id)
-#   mutate(id = cur_group_id()) |>        # assign 1..N IDs
-#   ungroup() |> 
-#   select(-dataset_id)
-
-
 #Draw piecewise/spline hazard plot
 if (mode == 2){
   hazard_files <- all_csv_files[grepl("hazard", all_csv_files)]
@@ -145,27 +127,12 @@ if (mode == 3){
     knots = unlist(data.i %>% dplyr::select(contains('knots')))
     alpha = data.i %>% dplyr::select(contains('alpha'))
     boundary = as.numeric(data.i %>% dplyr::select(contains('boundary')))
-    # hazards = data.i$hazard
-    # cumulative_hazard <- cumsum(hazards * c(0,diff(knots)))
-    # time_expand <- sort(unique(c(data.i$knots, time_grid)))
-    # # hazard_expanded <- full_join(data.i, time_expanded)
-    # hazard_df <- data.frame(time = time_expand)
-    # hazard_df$hazard = NA
-    # hazard_df$hazard[hazard_df$time %in% data.i$knots] <- hazards
-    # hazard_df <- hazard_df %>%
-    #   fill(everything(), .direction = "down")
     cumulative_hazard <- spline_cumulative_hazard(time_grid, knots, t(alpha), boundary_knots = c(0, boundary), degree)
     plot_matrix[i, ] <- t(cumulative_hazard)
   }
   hazard_mean <- apply(plot_matrix, 2, mean)
-  # hazard_sd <- apply(plot_matrix, 2, sd)
   hazard_2.5 <- apply(plot_matrix, 2, function(x) quantile(x, probs=0.025))
   hazard_97.5 <- apply(plot_matrix, 2, function(x) quantile(x, probs=0.975))
-  # plot(time_grid, hazard_2.5, type = "l", col = 'red',ylab = 'hazard', xlab = "time", ylim = c(0, max(hazard_97.5)))
-  # lines(time_grid, hazard_97.5, lty = 1, col = 'blue')
-  # lines(time_grid, hazard_mean, lty = 1, col = 'green')
-  # lines(time_grid, (time_grid/par[1])^par[2], lty = 1)
-  # legend("bottomright", legend = c("2.5% percentile", "97.5% percentile", "Mean", "True"), col = c("red", "blue", "green", "black"), lwd = 2)
   # ggplot2
   true_hazard = (time_grid/par[1])^par[2]
   plot_df <- data.frame(
@@ -256,6 +223,7 @@ CP_NDE_M = mean((causal_M[,1] < true_NDE_M + 1.96*sd_NE_M$NDE)&(causal_M[,1] > t
 CP_NIE_M = mean((causal_M[,2] < true_NIE_M + 1.96*sd_NE_M$NIE)&(causal_M[,2] > true_NIE_M - 1.96*sd_NE_M$NIE))
 
 file.remove(all_csv_files)
+
 
 
 
