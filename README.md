@@ -48,7 +48,7 @@ The joint model consists of:
 - Initializes fixed effects parameters (`beta.0`, `beta.1`, `beta.2`)
 - Initializes survival model parameters (`theta.x`, `theta.a`, `theta.m`)
 - Sets up variance-covariance matrices (`Sigma.a`, `Sigma.e`)
-- Configures Gauss-Hermite quadrature nodes and weights
+- Configures Gauss-Hermite quadrature and Gauss-Legendre quadrature nodes and weights
 - Defines different hazard modes (constant, piecewise, B-spline)
 
 **Parameters Set**:
@@ -62,48 +62,41 @@ The joint model consists of:
 **Purpose**: Generate simulated longitudinal and survival data under the joint model framework.
 
 **Key Functions**:
-- `data.gen()`: Main data generation function with SIMEX capability
+- `data.gen.vec()`: Generalized version supporting multiple biomarkers and covariates (updated 11/05/2025 for time-dependent covariates)
+  - Main data generation function with SIMEX capability
   - Generates visit times with random noise
   - Simulates covariates, random effects, and biomarkers
   - Generates event times from proportional hazards model
   - Implements change point in biomarker trajectories after event
-  - Adds measurement error for SIMEX procedure
-
-- `data.gen.vec()`: Generalized version supporting multiple biomarkers and covariates (updated 11/05/2025 for time-dependent covariates)
-
 - `Lambda.0(t, par)`: Baseline cumulative hazard function (Weibull)
   
 - `inv.Lambda.0(lam, par)`: Inverse cumulative hazard for event time generation
 
-- `simex()`: Creates SIMEX datasets with varying levels of measurement error
-  
-- `changeformat()`: Converts long format data to wide format
-
 **Output**: Data frame with longitudinal biomarker measurements and interval-censored event times
 
 #### 3. `Numeric Diff.R`
-**Purpose**: Compute score functions and Hessian matrices using numerical differentiation.
+**Purpose**: Compute likelihoods, score functions and Hessian matrices using numerical differentiation.
 
 **Key Functions**:
-- `diff.beta.0()`, `diff.beta.1()`, `diff.beta.2()`: Derivatives with respect to fixed effects
-- `diff.gamma()`: Derivative with respect to change point parameter
-- `diff.lambda0()`: Derivative with respect to baseline hazard
-- `diff.theta.x()`, `diff.theta.a()`, `diff.theta.m()`: Derivatives for survival model parameters
-- `diff.sigma.e()`, `diff.sigma.a()`: Derivatives for variance components
-- `diff.total()`: Combines all derivatives into score vector and Hessian matrix
-- `diff.likelihood.vec()`: Computes likelihood, score, and Hessian for vectorized parameters
+- `likelihood.vec2()`: Calculate likelihood with constant baseline hazard, using vectorized computation to save memory and time
+- `likelihood.piecewise()`: Calculate likelihood with piecewise constant baseline hazard, using vectorized computation to save memory and time
+- `spline_cumulative_hazard()`: Calculate B-spline's value as cumulative hazard given `x`, `knots`, `alpha`, `boundary_knots` and `degree`
+- `spline_hazard()`: Calculate derivatives of B-spline's value as hazard value 
+- `spline_hazard_matrix()`: Calculate derivatives of B-spline's value as hazard value when `x` input is matrix form
+- `likelihood.spline2()`: Calculate likelihood with B-spline cumulative hazard given `parameters`, `data` and `knots`, using vectorized computation to save memory and time
+- `diff.likelihood.vec()`: Compute score, and Hessian for vectorized parameters
 
 **Method**: Uses finite differences with delta = 1e-6 for numerical stability
 
 #### 4. `NR.R`
-**Purpose**: Implement Newton-Raphson optimization algorithms for parameter estimation.
+**Purpose**: Implement Newton-Raphson/Fisher-scoring algorithms for parameter estimation, create Bootstrap samples of data to estimate standard deviation of all parameters.
 
 **Key Functions**:
 - `NR()`: Newton-Raphson algorithm for piecewise constant hazard model
   - Iterative optimization using score and Hessian
   - Line search with backtracking for step size selection
   - Ensures positive hazard and variance parameter constraints
-  - Convergence tolerance: 1e-3, max iterations: 200
+  - Relative Convergence tolerance: 1e-3, max iterations: 200
 
 - `NR_spline()`: Newton-Raphson algorithm specifically for B-spline hazard model
   - Similar structure to `NR()` but adapted for spline parameters
@@ -113,7 +106,7 @@ The joint model consists of:
 - `bootstrap_sample()`: Creates bootstrap samples by resampling subjects with replacement
 
 **Convergence Criteria**:
-- Maximum parameter change < 1e-3
+- Maximum parameter relative change < 1e-3
 - Step size * max(abs(step)) < 1e-6 triggers convergence
 - Maximum 200 iterations
 
@@ -126,9 +119,6 @@ The joint model consists of:
   - Uses interval-censored survival data
   - Optimizes B-spline coefficients (alpha) via L-BFGS-B
   - Computes standard errors from Hessian matrix
-
-- `spline_cumulative_hazard()`: Evaluates cumulative hazard using B-spline basis
-- `spline_hazard()`: Evaluates hazard function using B-spline basis
 
 **Workflow**:
 1. Generate data using `data.gen.vec()`
@@ -143,6 +133,10 @@ The joint model consists of:
 - `hazard_i={i}_K={K}_p={p}_n={n}_seed={seed}.csv`
 - `est_std_i={i}_K={K}_p={p}_n={n}_seed={seed}.csv`
 - `CP_i={i}_K={K}_p={p}_n={n}_seed={seed}.csv`
+
+**HCC parallel computation**:
+- Since repeated trials are needed to demonstrate the performance of our joint model, we use HCC server to run repeated trials simutaneously to save the time
+- **Simulation.submit** specifies the repeated times, memory-per-computer and number of cores for CPU
 
 ### Data Analysis Files
 
@@ -180,8 +174,8 @@ The joint model consists of:
 - Removes subjects with missing education years
 - Excludes subjects diagnosed at first observation
 - Imputes missing biomarker values (SDMT: `sydigtot`, Stroop: `stroopwo`)
-- Removes subjects with completely missing biomarkers (IDs: 84, 900, 934, 1012, 2593, 2600)
-- Handles missing diagnosis times (`dx17`)
+- Removes subjects with completely missing biomarkers
+- Handles missing diagnosis indicators (`dx17`)
 
 **Variable Construction**:
 - `status`: Event indicator (1 = diagnosed, 0 = censored)
@@ -196,7 +190,7 @@ The joint model consists of:
 1. Fits separate linear mixed models for each biomarker using `lme()`
 2. Estimates variance components (Sigma.e, Sigma.a)
 3. Fits Cox proportional hazards model to estimate theta parameters
-4. Fits joint model using `JMbayes2` package for refined initial values
+4. Fits joint model using `JM` package for refined initial values
 
 **Main Analysis**:
 - Runs B-spline hazard model (mode 3)
