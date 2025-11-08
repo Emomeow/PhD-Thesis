@@ -240,7 +240,6 @@ library(lme4)          # Linear mixed models (for HD analysis)
 library(JMbayes2)      # Joint modeling (for HD analysis)
 library(survival)      # Survival analysis
 library(tibble)        # Modern data frames
-library(purrr)         # Functional programming
 ```
 
 ## Usage
