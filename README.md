@@ -14,14 +14,14 @@ The primary objectives of this research are to:
    - Interval-censored event times (diagnosis times)
    - A change point in biomarker trajectories occurring at the event time
 
-2. **Account for measurement error** in biomarkers using SIMEX (Simulation-Extrapolation) methodology
-
-3. **Estimate flexible baseline hazard functions** using:
+2. **Estimate likelihood of flexible baseline hazard functions** using:
    - Constant hazard (mode 1)
    - Piecewise constant hazard (mode 2)
    - B-spline representation (mode 3)
 
-4. **Apply the methodology** to Huntington's Disease data to understand how cognitive and motor biomarkers change before and after diagnosis
+3. **Apply the methodology** to Huntington's Disease data to understand how cognitive and motor biomarkers change before and after diagnosis
+
+4. **Study causal mediation effect** of covariate on survival probability through biomarkers and effect of covariate on biomarkers through event time
 
 ## Methodology
 
@@ -34,7 +34,15 @@ The joint model consists of:
 - **Survival sub-model**: Proportional hazards model for the interval-censored event time
   - Hazard: `λ(t|X,a,M*) = λ₀(t)exp(θₓX + θₐa + θₘM*(t))`
 
-- **Estimation**: Maximum likelihood using Gauss-Hermite quadrature for random effects integration and Newton-Raphson optimization
+- **Estimation**: Maximum likelihood using Gauss-Hermite quadrature for random effects integration and Fisher-scoring optimization
+
+Causal mediation analysis:
+
+- **g-formula** is used to approximately calculate the causal mediation effect, i.e. natural direct effect (NDE) and natural indirect effect (NIE) of covariates through mediators (biomarkers/event time)
+  
+- **Simulations with repeated trials** are performed to demonstrate the correctness of our method
+
+- **Application on HD data** reveals the mediation effect of CAP score on survival probability through two biomarkers sydigtot and stroopwo
 
 ## R Programs
 
@@ -89,16 +97,16 @@ The joint model consists of:
 **Method**: Uses finite differences with delta = 1e-6 for numerical stability
 
 #### 4. `NR.R`
-**Purpose**: Implement Newton-Raphson/Fisher-scoring algorithms for parameter estimation, create Bootstrap samples of data to estimate standard deviation of all parameters.
+**Purpose**: Implement Fisher-scoring algorithms for parameter estimation, create Bootstrap samples of data to estimate standard deviation of all parameters.
 
 **Key Functions**:
-- `NR()`: Newton-Raphson algorithm for piecewise constant hazard model
+- `NR()`: Fisher-scoring algorithm for piecewise constant hazard model
   - Iterative optimization using score and Hessian
   - Line search with backtracking for step size selection
   - Ensures positive hazard and variance parameter constraints
   - Relative Convergence tolerance: 1e-3, max iterations: 200
 
-- `NR_spline()`: Newton-Raphson algorithm specifically for B-spline hazard model
+- `NR_spline()`: Fisher-scoring algorithm specifically for B-spline hazard model
   - Similar structure to `NR()` but adapted for spline parameters
   - Uses `likelihood.spline2()` for B-spline evaluation
   - Enforces positive variance constraints
@@ -110,7 +118,16 @@ The joint model consists of:
 - Step size * max(abs(step)) < 1e-6 triggers convergence
 - Maximum 200 iterations
 
-#### 5. `One trial spline.R`
+#### 5. `Causal Mediation.R`
+**Purpose**: Conduct causal mediation analysis using piecewise constant hazard 
+
+**Key Functions**:
+-`With_cov()`: Calculate causal mediation effect of covariate on survival function through biomarkers given `x1`, `x2`, `t`, `parameters` and `data`
+-`With_cov_true()`: Calculate true causal mediation effect of covariate on survival function through biomarkers using true random effects
+-`NE_M2()`: Calculate causal mediation effect of covariate on biomarkers through event time given `x1`, `x2`, `t`, `parameters` and `data`
+-`NE_M2_true()`: Calculate true causal mediation effect of covariate on biomarkers through event time using true random effects
+
+#### 6. `One trial spline.R`
 **Purpose**: Execute a single simulation trial with B-spline hazard estimation.
 
 **Key Functions**:
@@ -140,7 +157,7 @@ The joint model consists of:
 
 ### Data Analysis Files
 
-#### 6. `Processing data.R`
+#### 7. `Processing data.R`
 **Purpose**: Aggregate and analyze results from multiple simulation trials or bootstrap samples.
 
 **Key Functions**:
@@ -164,7 +181,7 @@ The joint model consists of:
 - Saved as CSV files in Results directory
 - Deletes intermediate CSV files after processing
 
-#### 7. `HDanalysis.R`
+#### 8. `HDanalysis.R`
 **Purpose**: Analyze real Huntington's Disease data from the PREDICT-HD study.
 
 **Key Sections**:
