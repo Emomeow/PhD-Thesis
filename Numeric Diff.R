@@ -1193,10 +1193,12 @@ likelihood.piecewise = function(long.data, parameters)
 }
 
 #############################
-
-evaluate_spline <- function(x, knots, alpha, boundary_knots, degree = 3) {
+# 11/17/2025
+# using M-spline and I-spline
+evaluate_Mspline <- function(x, knots, alpha, boundary_knots, degree = 3) {
   # Step 1: Generate the B-spline basis matrix.
-  basis_matrix <- bs(x, knots = knots, degree = degree, intercept = TRUE, Boundary.knots = boundary_knots)
+  beta = exp(alpha)
+  basis_matrix <- mSpline(x, knots = knots, degree = degree, intercept = TRUE, Boundary.knots = boundary_knots)
 
   # Step 2: Validate the inputs.
   if (length(alpha) != ncol(basis_matrix)) {
@@ -1208,14 +1210,14 @@ evaluate_spline <- function(x, knots, alpha, boundary_knots, degree = 3) {
   }
 
   # Step 3: Calculate the spline value.
-  spline_value <- as.vector(basis_matrix %*% alpha)
+  spline_value <- as.vector(basis_matrix %*% beta)
 
   return(spline_value)
 }
 
-evaluate_spline_matrix <- function(X, knots, alpha, boundary_knots, degree = 3) {
+evaluate_Mspline_matrix <- function(X, knots, alpha, boundary_knots, degree = 3) {
   # --- Step 1: Pre-computation and Validation ---
-
+  beta = exp(alpha)
   # Store the original dimensions of the input matrix.
   original_dims <- dim(X)
   if (is.null(original_dims)) {
@@ -1226,7 +1228,7 @@ evaluate_spline_matrix <- function(X, knots, alpha, boundary_knots, degree = 3) 
   x_vector <- as.vector(as.matrix(X))
 
   # Generate the basis matrix for the vector.
-  basis_matrix <- bs(x_vector, knots = knots, degree = degree, intercept = TRUE, Boundary.knots = boundary_knots)
+  basis_matrix <- mSpline(x_vector, knots = knots, degree = degree, intercept = TRUE, Boundary.knots = boundary_knots)
 
   # Validate that the number of alpha coefficients matches the basis functions.
   if (length(alpha) != ncol(basis_matrix)) {
@@ -1240,7 +1242,7 @@ evaluate_spline_matrix <- function(X, knots, alpha, boundary_knots, degree = 3) 
   # --- Step 2: Core Calculation ---
 
   # Calculate the spline values for the unrolled vector.
-  spline_values_vector <- as.vector(basis_matrix %*% alpha)
+  spline_values_vector <- as.vector(basis_matrix %*% beta)
 
   # --- Step 3: Reshape the Output ---
 
@@ -1250,9 +1252,10 @@ evaluate_spline_matrix <- function(X, knots, alpha, boundary_knots, degree = 3) 
   return(output_matrix)
 }
 
-integrate_spline <- function(x, knots, alpha, boundary_knots, degree = 3) {
+evaluate_Ispline <- function(x, knots, alpha, boundary_knots, degree = 3) {
   # Step 1: Generate the B-spline basis matrix.
-  basis_matrix <- ibs(x, knots = knots, degree = degree, intercept = TRUE, Boundary.knots = boundary_knots)
+  beta = exp(alpha)
+  basis_matrix <- iSpline(x, knots = knots, degree = degree, intercept = TRUE, Boundary.knots = boundary_knots)
 
   # Step 2: Validate the inputs.
   if (length(alpha) != ncol(basis_matrix)) {
@@ -1264,15 +1267,15 @@ integrate_spline <- function(x, knots, alpha, boundary_knots, degree = 3) {
   }
 
   # Step 3: Calculate the spline value.
-  spline_value <- as.vector(basis_matrix %*% alpha)
-  basis_at_zero <- ibs(0,
-                      knots = knots,
-                      degree = degree,
-                      intercept = TRUE,
-                      Boundary.knots = boundary_knots)
-  value_at_zero <- as.vector(basis_at_zero %*% alpha)
-  anchored_hazard_value <- spline_value - value_at_zero
-  return(pmax(0, anchored_hazard_value))
+  spline_value <- as.vector(basis_matrix %*% beta)
+  # basis_at_zero <- ibs(0,
+  #                     knots = knots,
+  #                     degree = degree,
+  #                     intercept = TRUE,
+  #                     Boundary.knots = boundary_knots)
+  # value_at_zero <- as.vector(basis_at_zero %*% beta)
+  # anchored_hazard_value <- spline_value - value_at_zero
+  return(spline_value)
 }
 ###############################
 # 09/25/2025
@@ -1635,7 +1638,8 @@ likelihood.spline2 = function(long.data, parameters, knots){
   }
   inv.Sigma.e.hat = solve(Sigma.e.hat)
   
-  a.re = nodes%*%sqrtm(2*Sigma.a.hat)
+  L = chol(Sigma.a.hat)
+  a.re = sqrt(2)*nodes%*%t(L)
   
   y = long.data %>% dplyr::select(contains("ynew"))
   xval = long.data %>% dplyr::select(contains("xval"))
@@ -1650,7 +1654,7 @@ likelihood.spline2 = function(long.data, parameters, knots){
   A.i.3 = as.numeric(long.data$visit<=long.data$befdiag)
   A.i.4 = as.numeric(long.data$visit==long.data$befdiag)
   
-  boundary_knots <- c(0, max(time))
+  # boundary_knots <- c(0, max(time))
   ##calculating a1, b1, c1 and expand them
   if (K>1){
     part1 = as.matrix((y-rep(1,nrow(y))%*%t(beta.0.hat)-time%*%t(beta.1.hat)-t(beta.2.hat%*%t(xval))-time%*%t(gamma.hat))*A.i.1)
@@ -1682,10 +1686,6 @@ likelihood.spline2 = function(long.data, parameters, knots){
   c1 = -Part8%*%rep(1,no.gauss^K)/2
   
   ## use Gauss-Legendre integration, 20 nodes
-  # intervals = cbind(V, U)
-  # MC_sample = 1000
-  # batch = 10
-  # batch_sample = MC_sample/batch
   
   t_nodes <- outer((U+V)/2, z, FUN = function(m, z) m + (U-V)/2 * z)      # (400 x 20) matrix
   t_weights <- outer((U-V)/2, w, `*`) 
@@ -1699,7 +1699,7 @@ likelihood.spline2 = function(long.data, parameters, knots){
   #theta.mm at V
   theta.mm = t(A.i.4[A.i.4!=0]*theta.m.hat%*%t(y[A.i.4!=0,]))
   #theta.xx at V
-  theta.xx_V = t(A.i.4[A.i.4!=0]*theta.m.hat%*%t(xval[A.i.4!=0,]))
+  theta.xx_V = t(A.i.4[A.i.4!=0]*theta.x.hat%*%t(xval[A.i.4!=0,]))
   # \sum \int lambda(s)*exp(\theta_m*M)ds before V
   spline_time_int = spline_cumulative_hazard(time, knots, alpha.hat, boundary_knots, degree)
   # lambda.mm1 = sm%*%(A.i.2*diff(c(spline_time_int,0))*t(exp(theta.mm_expanded)))
@@ -1768,9 +1768,9 @@ likelihood.spline2 = function(long.data, parameters, knots){
   # calculate pI
   theta.mm1 = kronecker(t(rep(1,no.gauss^K)),theta.mm)
   theta.xx1 = kronecker(t(rep(1,no.gauss^K)),theta.xx_V)
-  pI = int_GL * exp(a1) * exp(theta.xx1+theta.aa_1+theta.mm1)
-  logpI = log(pI)
-  logpI[is.infinite(logpI)] = -700
+  # pI = int_GL * exp(a1) * exp(theta.xx1+theta.aa_1+theta.mm1)
+  logpI = log(int_GL) + a1 + theta.xx1 + theta.aa_1 + theta.mm1
+  # logpI[is.infinite(logpI)] = -700
   # q1
   if (K>1){
     part9 = as.matrix((y-rep(1,nrow(y))%*%t(beta.0.hat)-time%*%t(beta.1.hat)-t(beta.2.hat%*%t(xval)))*A.i.3)
@@ -1793,13 +1793,37 @@ likelihood.spline2 = function(long.data, parameters, knots){
   lambda.mx3_full = kronecker(t(rep(1,no.gauss^K)),lambda.mx3)
   logq2 = -lambda.mx3_full* exp(theta.aa_1)
   # f and Q
-  f = exp(status*(logpI+logq1)+(1-status)*(logq1+logq2))
-  
+  # f = exp(status*(logpI+logq1)+(1-status)*(logq1+logq2))
+  # f[is.na(f)] = 0
+  # 1. Initialize log_f as a standard matrix (as before)
+  log_f <- matrix(NA, nrow = nrow(logpI), ncol = ncol(logpI))
+
+  # 2. Ensure status is logical index
+  is_observed <- as.logical(status)
+
+  # 3. Calculate Observed Rows (status == 1)
+  if(any(is_observed)) {
+    # FIX: Use drop=FALSE to preserve dimensions and as.matrix() to convert type
+    # We perform the Matrix addition, then convert to base matrix for assignment
+    val_observed <- logpI[is_observed, , drop=FALSE] + logq1[is_observed, , drop=FALSE]
+    log_f[is_observed, ] <- as.matrix(val_observed)
+  }
+
+  # 4. Calculate Censored Rows (status == 0)
+  if(any(!is_observed)) {
+    # FIX: Same here
+    val_censored <- logq1[!is_observed, , drop=FALSE] + logq2[!is_observed, , drop=FALSE]
+    log_f[!is_observed, ] <- as.matrix(val_censored)
+  }
+
+  # 5. Exponentiate
+  f <- exp(log_f)
   Q = as.matrix(t(f%*%weight))/(sqrt(pi)^K)
-  
+  #logQ = log(Q)
+  #logQ[is.na(logQ)] = -2000
   return(list(ll=sum(log(Q)), ll.ind=log(Q)))
 }
-# use alpha to calculate hazard
+# use alpha and M-spline to calculate hazard
 likelihood.spline3 = function(long.data, parameters, knots){
   long.data$id = as.factor(long.data$id)
   id.matrix <- model.matrix(~ id - 1, data = long.data)
@@ -1848,11 +1872,14 @@ likelihood.spline3 = function(long.data, parameters, knots){
   }
   inv.Sigma.e.hat = solve(Sigma.e.hat)
   
-  a.re = nodes%*%sqrtm(2*Sigma.a.hat)
+  #L = chol(Sigma.a.hat)
+  #a.re = sqrt(2)*nodes%*%t(L)
+  a.re = gh_aw$nodes
+  weight_a = gh_aw$weights
   
   y = long.data %>% dplyr::select(contains("ynew"))
   xval = long.data %>% dplyr::select(contains("xval"))
-  xval.id = long.data.id %>% dplyr::select(contains("xval"))
+  # xval.id = long.data.id %>% dplyr::select(contains("xval"))
   time = long.data$visittime
   status = long.data.id$status
   V = long.data.id$preetime
@@ -1863,7 +1890,7 @@ likelihood.spline3 = function(long.data, parameters, knots){
   A.i.3 = as.numeric(long.data$visit<=long.data$befdiag)
   A.i.4 = as.numeric(long.data$visit==long.data$befdiag)
   
-  boundary_knots <- c(0, max(time))
+  # boundary_knots <- c(0, max(time))
   ##calculating a1, b1, c1 and expand them
   if (K>1){
     part1 = as.matrix((y-rep(1,nrow(y))%*%t(beta.0.hat)-time%*%t(beta.1.hat)-t(beta.2.hat%*%t(xval))-time%*%t(gamma.hat))*A.i.1)
@@ -1894,12 +1921,10 @@ likelihood.spline3 = function(long.data, parameters, knots){
   Part8 = sm%*%part8
   c1 = -Part8%*%rep(1,no.gauss^K)/2
   
-  ## generate Monte Carlo time to integrate, batch size = 100, total sample = 1000
-  intervals = cbind(V, U)
-  MC_sample = 10000
-  batch = 100
-  batch_sample = MC_sample/batch
+  ## use Gauss-Legendre integration, 20 nodes
   
+  t_nodes <- outer((U+V)/2, z, FUN = function(m, z) m + (U-V)/2 * z)      # (400 x 20) matrix
+  t_weights <- outer((U-V)/2, w, `*`) 
   ## compute \sum \int lambda(s)*exp(\theta_m*M)ds
   rows_to_insert <- long.data %>%
     filter(visit == befdiag)
@@ -1909,74 +1934,79 @@ likelihood.spline3 = function(long.data, parameters, knots){
   
   #theta.mm at V
   theta.mm = t(A.i.4[A.i.4!=0]*theta.m.hat%*%t(y[A.i.4!=0,]))
+  #theta.xx at V
+  theta.xx_V = t(A.i.4[A.i.4!=0]*theta.x.hat%*%t(xval[A.i.4!=0,]))
   # \sum \int lambda(s)*exp(\theta_m*M)ds before V
-  spline_time_int = integrate_spline(time, knots, alpha.hat, boundary_knots, degree)
-  lambda.mm1 = sm%*%(A.i.2*diff(c(spline_time_int,0))*t(exp(theta.mm_expanded)))
+  spline_time_int = evaluate_Ispline(time, knots, alpha.hat, boundary_knots, degree)
+  # lambda.mm1 = sm%*%(A.i.2*diff(c(spline_time_int,0))*t(exp(theta.mm_expanded)))
   
   # theta.xx and theta.aa
-  theta.xx = theta.x.hat %*% t(xval.id)
+  theta.xx = theta.x.hat %*% t(xval)
+  lambda.mx1 = sm%*%(A.i.2*diff(c(spline_time_int,0))*t(exp(theta.mm_expanded+theta.xx)))
+  
   theta.aa = theta.a.hat %*% t(a.re)
-  theta.xx_1 = kronecker(t(rep(1,no.gauss^K)),t(theta.xx))
+  # theta.xx_1 = kronecker(t(rep(1,no.gauss^K)),t(theta.xx))
   theta.aa_1 = kronecker(rep(1,n.id), theta.aa)
   # reformat
-  theta.xx_full = theta.xx_1[, rep(1:ncol(theta.xx_1), each = batch_sample)]
-  theta.aa_full = theta.aa_1[, rep(1:ncol(theta.aa_1), each = batch_sample)]
-  c1_full = c1[, rep(1:ncol(c1), each = batch_sample)]
-  b1_full = b1[, rep(1:ncol(b1), each = batch_sample)]
-  int_with_t = 0
-  for (k in 1:batch){
-    u <- runif(n.id * batch_sample)   # uniform(0,1)
-    a <- rep(intervals[, 1], each = batch_sample)
-    b <- rep(intervals[, 2], each = batch_sample)
-    sample.time <- t(matrix(a + (b - a) * u, nrow = batch_sample, ncol = n.id))
-    
-    #long.data.expanded <- bind_rows(long.data, new_rows) %>%
-    # arrange(id, visit)
-    #y_expanded <- long.data.expanded %>% dplyr::select(contains("ynew"))
-    time_expanded = matrix(rows_to_insert$visittime)[,rep(1, each = batch_sample)]
-    id_time = data.frame(id = rows_to_insert$id, visit = rows_to_insert$visit, time_expanded)
-    id_MCtime = data.frame(id = long.data.id$id, visit = new_rows$visit, sample.time)
-    id_time_expanded <- bind_rows(id_time, id_MCtime) %>%
-      arrange(id, visit)
-    
-    
-    # \sum \int lambda(s)*exp(\theta_m*M)ds from V to MC.time
-    
-    MC_time_expanded <- id_time_expanded %>% dplyr::select(contains("X"))
-    MC_time.vector = as.vector(as.matrix(MC_time_expanded))
-    MC_spline_int = matrix(integrate_spline(MC_time.vector, knots, alpha.hat, boundary_knots, degree),nrow = n.id*2, ncol = batch_sample)
-    int_matrix <- Matrix(kronecker(diag(n.id), t(c(-1,1))), sparse = T)
-    MC_spline <- int_matrix%*%MC_spline_int
-    lambda.mm2 = MC_spline * exp(theta.mm)
-    
-    #total lambda * exp(M)
-    lambda.mm <- lambda.mm1 + status*lambda.mm2
-    # lambda.mm[lambda.mm<0] = 1 # censor case
-    
-    # reformat
-    # theta.xx_full = theta.xx_1[, rep(1:ncol(theta.xx_1), each = ncol(lambda.mm))]
-    # theta.aa_full = theta.aa_1[, rep(1:ncol(theta.aa_1), each = ncol(lambda.mm))]
-    MC_time_full = sample.time[, rep(1:ncol(sample.time), times = ncol(theta.xx_1))]
-    lambda.mm_full = lambda.mm[, rep(1:ncol(lambda.mm), times = ncol(theta.xx_1))]
-    factor1_full = exp(-lambda.mm_full*exp(theta.xx_full+theta.aa_full))
-    lambda_t = evaluate_spline_matrix(sample.time, knots, alpha.hat, boundary_knots, degree)
-    lambda_t_full = lambda_t[, rep(1:ncol(lambda_t), times = ncol(theta.xx_1))]
-    # c1_full = c1[, rep(1:ncol(c1), each = ncol(sample.time))]
-    # b1_full = b1[, rep(1:ncol(b1), each = ncol(sample.time))]
-    # calculate MC integrate
-    MC_integrate = exp(b1_full*MC_time_full+c1_full*MC_time_full^2)*lambda_t_full*factor1_full
-    averaging_matrix <- Matrix(kronecker(
-      diag(no.gauss^K), rep(1/batch_sample, batch_sample)
-    ), sparse = T)
-    int_with_t = int_with_t + MC_integrate%*%averaging_matrix * (U-V)/batch
-    gc()
-  }
+  # theta.xx_full = theta.xx_1[, rep(1:ncol(theta.xx_1), each = no.gauss)]
+  theta.aa_full = theta.aa_1[, rep(1:ncol(theta.aa_1), each = no.gauss)]
+  c1_full = c1[, rep(1:ncol(c1), each = no.gauss)]
+  b1_full = b1[, rep(1:ncol(b1), each = no.gauss)]
+  # int_with_t = 0
+  # for (k in 1:batch){
+  #   u <- runif(n.id * batch_sample)   # uniform(0,1)
+  #   a <- rep(intervals[, 1], each = batch_sample)
+  #   b <- rep(intervals[, 2], each = batch_sample)
+  #   sample.time <- t(matrix(a + (b - a) * u, nrow = batch_sample, ncol = n.id))
+  
+  #long.data.expanded <- bind_rows(long.data, new_rows) %>%
+  # arrange(id, visit)
+  #y_expanded <- long.data.expanded %>% dplyr::select(contains("ynew"))
+  time_expanded = matrix(rows_to_insert$visittime)[,rep(1, each = no.gauss)]
+  id_time = data.frame(id = rows_to_insert$id, visit = rows_to_insert$visit, time_expanded)
+  id_GLtime = data.frame(id = long.data.id$id, visit = new_rows$visit, t_nodes)
+  id_time_expanded <- bind_rows(id_time, id_GLtime) %>%
+    arrange(id, visit)
+  
+  
+  # \sum \int lambda(s)*exp(\theta_m*M)ds from V to MC.time
+  
+  GL_time_expanded <- id_time_expanded %>% dplyr::select(contains("X"))
+  GL_time.vector = as.vector(as.matrix(GL_time_expanded))
+  GL_spline_int = matrix(evaluate_Ispline(GL_time.vector, knots, alpha.hat, boundary_knots, degree),nrow = n.id*2, ncol = no.gauss)
+  int_matrix <- Matrix(kronecker(diag(n.id), t(c(-1,1))), sparse = T)
+  GL_spline <- int_matrix%*%GL_spline_int
+  lambda.mx2 = GL_spline * exp(theta.mm+theta.xx_V)
+  
+  #total lambda * exp(M)
+  lambda.mx <- lambda.mx1 + status*lambda.mx2
+  # lambda.mm[lambda.mm<0] = 1 # censor case
+  
+  # reformat
+  # theta.xx_full = theta.xx_1[, rep(1:ncol(theta.xx_1), each = ncol(lambda.mm))]
+  theta.aa_full = theta.aa_1[, rep(1:ncol(theta.aa_1), each = ncol(lambda.mx))]
+  GL_time_full = t_nodes[, rep(1:no.gauss, times = no.gauss^K)]
+  lambda.mx_full = lambda.mx[, rep(1:ncol(lambda.mx), times = no.gauss^K)]
+  factor1_full = exp(-lambda.mx_full*exp(theta.aa_full))
+  lambda_t = evaluate_Mspline_matrix(t_nodes, knots, alpha.hat, boundary_knots, degree)
+  lambda_t_full = lambda_t[, rep(1:ncol(lambda_t), times = no.gauss^K)]
+  # c1_full = c1[, rep(1:ncol(c1), each = ncol(sample.time))]
+  # b1_full = b1[, rep(1:ncol(b1), each = ncol(sample.time))]
+  # calculate MC integrate
+  GL_integrate = exp(b1_full*GL_time_full+c1_full*GL_time_full^2)*lambda_t_full*factor1_full
+  weighting_matrix <- kronecker(
+    t(rep(1,no.gauss^K)),t_weights)
+  sum_matrix = Matrix(kronecker(diag(no.gauss^K), rep(1, no.gauss)), sparse = T)
+  int_GL = (GL_integrate*weighting_matrix) %*% sum_matrix 
+  #   gc()
+  # }
   
   # calculate pI
   theta.mm1 = kronecker(t(rep(1,no.gauss^K)),theta.mm)
-  pI = int_with_t * exp(a1) * exp(theta.xx_1+theta.aa_1+theta.mm1)
-  logpI = log(pI)
-  logpI[is.infinite(logpI)] = -700
+  theta.xx1 = kronecker(t(rep(1,no.gauss^K)),theta.xx_V)
+  # pI = int_GL * exp(a1) * exp(theta.xx1+theta.aa_1+theta.mm1)
+  logpI = log(int_GL) + a1 + theta.xx1 + theta.aa_1 + theta.mm1
+  # logpI[is.infinite(logpI)] = -700
   # q1
   if (K>1){
     part9 = as.matrix((y-rep(1,nrow(y))%*%t(beta.0.hat)-time%*%t(beta.1.hat)-t(beta.2.hat%*%t(xval)))*A.i.3)
@@ -1995,14 +2025,39 @@ likelihood.spline3 = function(long.data, parameters, knots){
   
   logq1 = -Part13/2
   # q2
-  lambda.mm3 = sm%*%t(A.i.2*diff(c(spline_time_int,0))*exp(theta.mm_expanded))
-  lambda.mm3_full = kronecker(t(rep(1,no.gauss^K)),lambda.mm3)
-  logq2 = -lambda.mm3_full* exp(theta.xx_1+theta.aa_1)
+  lambda.mx3 = sm%*%t(A.i.2*diff(c(spline_time_int,0))*exp(theta.mm_expanded+theta.xx))
+  lambda.mx3_full = kronecker(t(rep(1,no.gauss^K)),lambda.mx3)
+  logq2 = -lambda.mx3_full* exp(theta.aa_1)
   # f and Q
-  f = exp(status*(logpI+logq1)+(1-status)*(logq1+logq2))
+  # f = exp(status*(logpI+logq1)+(1-status)*(logq1+logq2))
+  # f[is.na(f)] = 0
+  # 1. Initialize log_f as a standard matrix (as before)
+  log_f <- matrix(NA, nrow = nrow(logpI), ncol = ncol(logpI))
   
-  Q = as.matrix(t(f%*%weight))/(sqrt(pi)^K)
+  # 2. Ensure status is logical index
+  is_observed <- as.logical(status)
   
+  # 3. Calculate Observed Rows (status == 1)
+  if(any(is_observed)) {
+    # FIX: Use drop=FALSE to preserve dimensions and as.matrix() to convert type
+    # We perform the Matrix addition, then convert to base matrix for assignment
+    val_observed <- logpI[is_observed, , drop=FALSE] + logq1[is_observed, , drop=FALSE]
+    log_f[is_observed, ] <- as.matrix(val_observed)
+  }
+  
+  # 4. Calculate Censored Rows (status == 0)
+  if(any(!is_observed)) {
+    # FIX: Same here
+    val_censored <- logq1[!is_observed, , drop=FALSE] + logq2[!is_observed, , drop=FALSE]
+    log_f[!is_observed, ] <- as.matrix(val_censored)
+  }
+  
+  # 5. Exponentiate
+  f <- exp(log_f)
+  f[is.na(f)|is.infinite(f)] = 0
+  Q = as.matrix(t(f%*%weight_a))/(sqrt(pi)^K)
+  #logQ = log(Q)
+  #logQ[is.na(logQ)] = -2000
   return(list(ll=sum(log(Q)), ll.ind=log(Q)))
 }
 ############################
@@ -2023,8 +2078,8 @@ perturb_likelihood <- function(index, parameters, long.data, delta=1e-6) {
     likelihood.2 <- likelihood.piecewise(long.data, para.2)$ll.ind
   }
   else if (mode == 3){
-    likelihood.1 <- likelihood.spline2(long.data, para.1, knots)$ll.ind
-    likelihood.2 <- likelihood.spline2(long.data, para.2, knots)$ll.ind
+    likelihood.1 <- likelihood.spline3(long.data, para.1, knots)$ll.ind
+    likelihood.2 <- likelihood.spline3(long.data, para.2, knots)$ll.ind
     gc()
   }
   # Compute the numerical difference
@@ -2040,13 +2095,14 @@ diff.likelihood.vec = function(long.data, parameters){
   # parameters.all=rbind(parameters,rep(1,num_para)%*%as.matrix(parameters)+delta*diag(rep(1,num_para)),rep(1,num_para)%*%as.matrix(parameters)-delta*diag(rep(1,num_para)))
   n.id = length(unique(long.data$id))
   diff = t(sapply(1:num_para, perturb_likelihood, parameters=parameters,long.data=long.data))
+  H <- diff %*% t(diff)
+  H = (H+t(H))/2
+  eig <- eigen(H)
   
-
-  if (is.na(det(diff%*%t(diff)))||qr(diff%*%t(diff))$rank<num_para){
-    hessian = -ginv(diff%*%t(diff)+1e-6*diag(num_para))
-  } else {
-    hessian = -ginv(diff%*%t(diff))
-  }
+  eig$values[eig$values < 1e-6] <- 1e-6   # enforce PD
+  H_pd <- eig$vectors %*% diag(eig$values) %*% t(eig$vectors)
+  
+  hessian <- -solve(H_pd)
   score = apply(diff, 1, sum)
   return(list(Score=score, Hessian=hessian))
 }
