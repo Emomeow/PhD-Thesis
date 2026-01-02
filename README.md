@@ -91,7 +91,7 @@ Causal mediation analysis:
 - `spline_cumulative_hazard()`: Calculate B-spline's value as cumulative hazard given `x`, `knots`, `alpha`, `boundary_knots` and `degree`
 - `spline_hazard()`: Calculate derivatives of B-spline's value as hazard value 
 - `spline_hazard_matrix()`: Calculate derivatives of B-spline's value as hazard value when `x` input is matrix form
-- `likelihood.spline2()`: Calculate likelihood with B-spline cumulative hazard given `parameters`, `data` and `knots`, using vectorized computation to save memory and time
+- `likelihood.spline3()`: Calculate likelihood with B-spline cumulative hazard given `parameters`, `data` and `knots`, using vectorized computation to save memory and time
 - `diff.likelihood.vec()`: Compute score, and Hessian for vectorized parameters
 
 **Method**: Uses finite differences with delta = 1e-6 for numerical stability
