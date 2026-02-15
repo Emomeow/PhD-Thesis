@@ -114,25 +114,25 @@ NR_spline = function(long.data, hat.parameters, knots, degree=3, tol = 1e-3, max
     while (1){
       est.parameters = hat.parameters - lr*t(step)
       # alpha.est = t(est.parameters %>% dplyr::select(contains("alpha")))
-      Sigma.e.est = matrix(0, nrow=K,ncol=K)
-      sigma.e.est.vec = as.matrix(est.parameters %>% dplyr::select(contains("Sigma.e")))
-      Sigma.e.est[upper.tri(Sigma.e,diag = TRUE)] = sigma.e.est.vec
-      if (K>1){
-        Sigma.e.est=Sigma.e.est+t(Sigma.e.est)-diag(diag(Sigma.e.est))
-      }
-      eigen_e = eigen(Sigma.e.est, symmetric = TRUE, only.values = TRUE)$values
-      
-      Sigma.a.est = matrix(0, nrow=K,ncol=K)
-      sigma.a.est.vec = as.matrix(est.parameters %>% dplyr::select(contains("Sigma.a")))
-      Sigma.a.est[upper.tri(Sigma.a,diag = TRUE)] = sigma.a.est.vec
-      if (K>1){
-        Sigma.a.est=Sigma.a.est+t(Sigma.a.est)-diag(diag(Sigma.a.est))
-      }
-      eigen_a = eigen(Sigma.a.est, symmetric = TRUE, only.values = TRUE)$values
-      if (any(eigen_e<=0)|any(eigen_a<=0)){
-        lr = lr/2
-        next
-      }
+      # Sigma.e.est = matrix(0, nrow=K,ncol=K)
+      # sigma.e.est.vec = as.matrix(est.parameters %>% dplyr::select(contains("Sigma.e")))
+      # Sigma.e.est[upper.tri(Sigma.e,diag = TRUE)] = sigma.e.est.vec
+      # if (K>1){
+      #   Sigma.e.est=Sigma.e.est+t(Sigma.e.est)-diag(diag(Sigma.e.est))
+      # }
+      # eigen_e = eigen(Sigma.e.est, symmetric = TRUE, only.values = TRUE)$values
+      # 
+      # Sigma.a.est = matrix(0, nrow=K,ncol=K)
+      # sigma.a.est.vec = as.matrix(est.parameters %>% dplyr::select(contains("Sigma.a")))
+      # Sigma.a.est[upper.tri(Sigma.a,diag = TRUE)] = sigma.a.est.vec
+      # if (K>1){
+      #   Sigma.a.est=Sigma.a.est+t(Sigma.a.est)-diag(diag(Sigma.a.est))
+      # }
+      # eigen_a = eigen(Sigma.a.est, symmetric = TRUE, only.values = TRUE)$values
+      # if (any(eigen_e<=0)|any(eigen_a<=0)){
+      #   lr = lr/2
+      #   next
+      # }
 
       # likelihood.est = likelihood.spline2(long.data, est.parameters, knots)$ll
       likelihood.est = likelihood.spline3(long.data, est.parameters, knots)$ll
@@ -185,3 +185,4 @@ NR_spline = function(long.data, hat.parameters, knots, degree=3, tol = 1e-3, max
   }
   return(hat.parameters)
 }
+
