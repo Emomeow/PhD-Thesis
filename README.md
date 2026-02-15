@@ -15,8 +15,8 @@ The primary objectives of this research are to:
    - A change point in biomarker trajectories occurring at the event time
 
 2. **Estimate likelihood of flexible baseline hazard functions** using:
-   - Constant hazard (mode 1)
-   - Piecewise constant hazard (mode 2)
+   - <del>Constant hazard (mode 1)</del>
+   - <del>Piecewise constant hazard (mode 2)</del>
    - B-spline representation (mode 3)
 
 3. **Apply the methodology** to Huntington's Disease data to understand how cognitive and motor biomarkers change before and after diagnosis
@@ -28,8 +28,8 @@ The primary objectives of this research are to:
 The joint model consists of:
 
 - **Longitudinal sub-model**: Mixed-effects model for biomarker trajectories with a change point at the event time
-  - Before event: `M*(t) = β₀ + β₁t + β₂X + a + ε`
-  - After event: `M*(t) = β₀ + β₁t + β₂X + γ(t-T) + a + ε`
+  - Before event: `M*(t) = β₀ + β₁t + β₂X + a + ε(t)`
+  - After event: `M*(t) = β₀ + β₁t + β₂X + γ(t-T) + a + ε(t)`
 
 - **Survival sub-model**: Proportional hazards model for the interval-censored event time
   - Hazard: `λ(t|X,a,M*) = λ₀(t)exp(θₓX + θₐa + θₘM*(t))`
@@ -57,10 +57,14 @@ Causal mediation analysis:
 - Initializes survival model parameters (`theta.x`, `theta.a`, `theta.m`)
 - Sets up variance-covariance matrices (`Sigma.a`, `Sigma.e`)
 - Configures Gauss-Hermite quadrature and Gauss-Legendre quadrature nodes and weights
-- Defines different hazard modes (constant, piecewise, B-spline)
+- Defines different hazard modes (<del>constant, piecewise,</del> B-spline)
+- `estimate_bspline_hazard()`: Maximum likelihood estimation of B-spline coefficients
+  - Uses interval-censored survival data
+  - Optimizes B-spline coefficients (alpha) via L-BFGS-B
+  - Computes standard errors from Hessian matrix
 
 **Parameters Set**:
-- `mode`: 1 (constant), 2 (piecewise), or 3 (B-spline) hazard
+- `mode`: <del>1 (constant), 2 (piecewise), or</del> 3 (B-spline) hazard
 - `K`: Number of biomarker domains (default: 2)
 - `p`: Number of covariates (default: 1)
 - `J`: Number of visits (default: 11)
@@ -86,8 +90,8 @@ Causal mediation analysis:
 **Purpose**: Compute likelihoods, score functions and Hessian matrices using numerical differentiation.
 
 **Key Functions**:
-- `likelihood.vec2()`: Calculate likelihood with constant baseline hazard, using vectorized computation to save memory and time
-- `likelihood.piecewise()`: Calculate likelihood with piecewise constant baseline hazard, using vectorized computation to save memory and time
+- <del>`likelihood.vec2()`: Calculate likelihood with constant baseline hazard, using vectorized computation to save memory and time</del>
+- <del>`likelihood.piecewise()`: Calculate likelihood with piecewise constant baseline hazard, using vectorized computation to save memory and time</del>
 - `spline_cumulative_hazard()`: Calculate B-spline's value as cumulative hazard given `x`, `knots`, `alpha`, `boundary_knots` and `degree`
 - `spline_hazard()`: Calculate derivatives of B-spline's value as hazard value 
 - `spline_hazard_matrix()`: Calculate derivatives of B-spline's value as hazard value when `x` input is matrix form
@@ -100,7 +104,7 @@ Causal mediation analysis:
 **Purpose**: Implement Fisher-scoring algorithms for parameter estimation, create Bootstrap samples of data to estimate standard deviation of all parameters.
 
 **Key Functions**:
-- `NR()`: Fisher-scoring algorithm for piecewise constant hazard model
+- <del>`NR()`: Fisher-scoring algorithm for piecewise constant hazard model</del>
   - Iterative optimization using score and Hessian
   - Line search with backtracking for step size selection
   - Ensures positive hazard and variance parameter constraints
@@ -108,8 +112,8 @@ Causal mediation analysis:
 
 - `NR_spline()`: Fisher-scoring algorithm specifically for B-spline hazard model
   - Similar structure to `NR()` but adapted for spline parameters
-  - Uses `likelihood.spline2()` for B-spline evaluation
-  - Enforces positive variance constraints
+  - Uses `likelihood.spline3()` for B-spline evaluation
+  - <del>Enforces positive definite variance structure constraints<del>
 
 - `bootstrap_sample()`: Creates bootstrap samples by resampling subjects with replacement
 
@@ -132,10 +136,6 @@ Causal mediation analysis:
 
 **Key Functions**:
 - Complete workflow from data generation to parameter estimation
-- `estimate_bspline_hazard()`: Maximum likelihood estimation of B-spline coefficients
-  - Uses interval-censored survival data
-  - Optimizes B-spline coefficients (alpha) via L-BFGS-B
-  - Computes standard errors from Hessian matrix
 
 **Workflow**:
 1. Generate data using `data.gen.vec()`
