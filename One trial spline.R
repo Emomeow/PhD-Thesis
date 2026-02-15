@@ -11,8 +11,9 @@ library(Matrix)
 library(matrixcalc)
 # library(expm)
 library(survival)
+library(matrixStats)
 
-setwd("C:/Users/yuezh/OneDrive - University of Nebraska Medical Center/Research/Joint_model/joint_likelihood")
+setwd("./")
 source('Data generation.R')
 source('Numeric Diff.R')
 mode = 3
@@ -21,13 +22,13 @@ source('Causal Mediation.R')
 source('NR.R')
 source('Dynamic Prediction.R')
 
-# args = commandArgs(trailingOnly=TRUE)
-# i=as.numeric(args[1])
+args = commandArgs(trailingOnly=TRUE)
+i=as.numeric(args[1])
 # 
-# iniseed=1111+i
+iniseed=1111+i
 
 
-set.seed(1234)
+set.seed(iniseed)
 
 
 col_names <- colnames(parameters)
@@ -38,7 +39,7 @@ long.data = data.gen.vec(parameters,n.id,J,par,Sigma.x)
 #################################
 # Give initial guess of B-spline cumulative hazard
 long.data.id = long.data[!duplicated(long.data$id),]
-mean(long.data.id$status)
+# mean(long.data.id$status)
 end_times <- pmin(long.data.id$etime, long.data.id$ctime)
 
 # Combine all end times with only the start times that are different
@@ -59,8 +60,8 @@ surv_object <- Surv(time = surv_data$preetime, time2 = surv_data$U, type = "inte
 # surv_object <- Surv(time = surv_data$time_cox, event = surv_data$status, type = 'right')
 # boundary_knots = c(0, max(long.data$visittime))
 
-#hazard_fit <- estimate_bspline_hazard(surv_object, knots, degree)
-hazard_fit <- estimate_mspline_hazard(surv_object, knots, degree)
+hazard_fit <- estimate_bspline_hazard(surv_object, knots, degree)
+# hazard_fit <- estimate_mspline_hazard(surv_object, knots, degree)
 
 alpha = data.frame(t(hazard_fit[["coefficients"]][["estimate"]]))
 colnames(alpha) = paste("alpha",1:(num_knots+degree+1),sep = "_")
@@ -139,8 +140,7 @@ hat.parameters = ini.parameters
 #   likelihood.test[i]=likelihood.piecewise(long.data, parameters.test.i)$ll
 # }
 # plot(beta.0.test,likelihood.test)
-# likelihood has some problem
-ini.likelihood = likelihood.spline3(long.data, ini.parameters, knots)$ll
+# ini.likelihood = likelihood.spline3(long.data, ini.parameters, knots)$ll
 ##################################
 
 hat.parameters = NR_spline(long.data, hat.parameters, knots)
@@ -171,7 +171,7 @@ hazard = cbind(knots_i, alpha.hat)
 write.csv(hazard,paste("hazard_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
 
 # bootstrap for stddev
-B = 2  #test
+B = 50 
 bootstrap = 1
 
 
@@ -319,133 +319,3 @@ write.csv(sd_NE_M, paste("sd_NE_M_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"s
 write.csv(CP_NE_M, paste("CP_NE_M_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
 
 #########################################
-## Dynamic Prediction
-t = 6
-data.test = data.gen.vec(parameters, 5, J, par, Sigma.x)
-CP_DP = vector("list", 5)
-for (i in 1:5){
-  long.data.i = data.test[data.test$id == i, ]
-  CP.i = DP(long.data.i, t, hat.parameters)
-  CP_DP[[i]] <- CP.i
-}
-
-CP_DP = do.call(rbind, CP_DP)
-###############################
-# doparallel
-library(doParallel)
-library(foreach)
-# --- 1. Set up the Parallel Backend ---
-# Use one less than your total cores to keep your computer responsive
-n_cores <- detectCores() - 1 
-
-# Create a cluster
-my_cluster <- makeCluster(n_cores) 
-
-# Register the cluster for 'foreach' to use
-registerDoParallel(my_cluster)
-
-# --- 2. Run the Parallel Loop ---
-# We set a seed for reproducible results in parallel
-RNGkind("L'Ecuyer-CMRG") # Use a parallel-safe random number generator
-
-# The 'coef_bootstrap' matrix is now created by foreach
-coef_bootstrap <- foreach(
-  b = 1:B, 
-  .combine = 'rbind', # Combine results by row-binding them
-  
-  # List all packages your loop code depends on
-  .packages = c('dplyr', 'survival','splines','splines2','Matrix','statmod','expm','matrixcalc','MASS'), 
-  
-  # List all functions and variables from your main environment that
-  # the workers need to access.
-  .export = c('bootstrap_sample', 'n.id', 'J', 'num_knots', 'degree',
-              'estimate_bspline_hazard', 'coef', 'alpha', 'NR_spline', 
-              'parameters', 'long.data') 
-) %dopar% {
-  
-  # --- This is the code from *inside* your loop ---
-  # (No changes are needed to the logic)
-  try({
-  bootstrap_data = bootstrap_sample(long.data)
-  bootstrap_data$id = rep(1:n.id, each = J)
-  long.data.id = bootstrap_data[!duplicated(bootstrap_data$id),]
-  time = c(long.data.id$preetime,pmin(long.data.id$etime,long.data.id$ctime))
-  
-  knots = quantile(time, probs = seq(1, num_knots)/(num_knots+1), na.rm = TRUE)
-  
-  boundary_knots = c(0, max(time, na.rm = TRUE))
-  
-  # surv_data <- long.data.id %>%
-  #   mutate(U = if_else(status == 1, etime, Inf))
-  # 
-  # surv_object <- Surv(time = surv_data$preetime, time2 = surv_data$U, type = "interval2")
-  # 
-  # hazard_fit <- estimate_bspline_hazard(surv_object, knots, degree)
-  # 
-  # alpha = data.frame(t(hazard_fit[["coefficients"]][["estimate"]]))
-  # colnames(alpha) = paste("alpha",1:(num_knots+degree+1),sep = "_")
-  # 
-  # hat.parameters =  cbind(coef, alpha)
-  
-  bootstrap.parameters <- NR_spline(bootstrap_data, hat.parameters, knots)
-  boostrap.parameters <- as.matrix(bootstrap.parameters)
-  
-  # --- Return the result for this iteration ---
-  # 'foreach' automatically combines this output
-  bootstrap.parameters[, 1:length(parameters)]
-  })
-} # --- End of %dopar% loop ---
-
-stopCluster(my_cluster)
-
-stddev = data.frame(t(apply(coef_bootstrap, 2, sd)))
-# Hessian.MLE = diff.likelihood.vec(long.data, hat.parameters)$Hessian
-# stddev = data.frame(t(sqrt(-diag(Hessian.MLE))))
-# stddev = stddev[,-((length(stddev)-knots+1):length(stddev))]
-colnames(stddev) = col_names
-CP = as.matrix((parameters >= coef-1.96*stddev)&(parameters <= coef+1.96*stddev))
-colnames(CP) = col_names
-
-write.csv(stddev,paste("est_std_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
-write.csv(CP,paste("CP_i=",as.character(i),"K=",K,"p=",p,"n=",n.id,"seed=",iniseed,".csv",sep=""),row.names=FALSE)
-
-##########################################
-
-# # test likelihood for piecewise and Bspline
-# degree <- 1
-# knots <- NULL
-# num_knots = 0
-# # alpha = rep(1/par[1], num_knots+degree+1)
-# 
-# 
-# #use cumsum(exp(alpha))
-# boundary_knots = c(0, max(long.data$visittime))
-# alpha <- c(-Inf, log(boundary_knots[2]/par[1]))
-# hazard_value2 = spline_hazard(test.time, knots, alpha, boundary_knots, degree)
-# #hazard_value_matrix = evaluate_spline_matrix(test.time, knots, alpha, boundary_knots, degree)
-# cumulative_hazard_value2 = spline_cumulative_hazard(test.time, knots, alpha, boundary_knots, degree)
-# 
-# alpha <- data.frame(t(alpha))
-# colnames(alpha) = paste("alpha",1:(num_knots+degree+1),sep = "_")
-# ini.parameters = cbind(parameters, alpha)
-# hat.parameters = ini.parameters
-# ll1_2 = likelihood.spline(long.data, hat.parameters, knots)$ll
-# ll1_3 = likelihood.spline2(long.data, hat.parameters, knots)$ll
-# mode = 2
-# source('Initial parameter.R')
-# d = c(0, quantile(time, probs = seq(1, knots)/knots, na.rm = TRUE))
-# # ini.hazard = data.frame(t(1/knots/diff(d)))
-# ini.hazard = data.frame(t(rep(1/par[1], knots)))
-# colnames(ini.hazard) = paste("hazard",1:knots,sep = "_")
-# ini.parameters = cbind(parameters, ini.hazard)
-# hat.parameters = ini.parameters
-# ll2 = likelihood.piecewise(long.data, hat.parameters)$ll
-# 
-# mode = 1
-# source('Initial parameter.R')
-# hat.parameters = unlist(parameters)
-# ll3 = likelihood.vec2(long.data, hat.parameters)
-
-# Now the three codes in constant hazard case are the same.
-
-# verify that fitted hazard close to true
